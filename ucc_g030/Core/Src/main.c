@@ -18,13 +18,9 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-
-
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stdio.h>
-#include <string.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,21 +58,219 @@ void Check_Usart_Data();
 void USART1_Send (char chr);
 uint32_t ConvertCharToGradus(char * buffer);
 void Send_Azimuth_to_USART(int az);
+uint8_t Button_Pressed(uint8_t btn_id);
+void Init_Buttons();
+void Buttons_Poll(void);
+void Set_N(void);
+void Set_NE(void);
+void Set_E(void);
+void Set_SE(void);
+void Set_S(void);
+void Set_SW(void);
+void Set_W(void);
+void Set_NW(void);
+void Set_300(void);
+void Set_390(void);
+void Set_430(void);
+void Set_470(void);
+void Set_510(void);
+void Set_560(void);
+void Set_PA(void);
+
 
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-uint8_t out1[1] = {0};
-uint8_t out2[1] = {0};
-uint8_t out3[1] = {0};
-uint8_t out4[1] = {0};
+uint8_t relay_outs[1] = {0};
+uint8_t load_outs[1] = {0};
+uint8_t udn_outs[1] = {0};
+uint8_t led_outs[1] = {0};
 uint8_t flag_stop = 0;
 uint8_t flag_status = 0;
 uint8_t flag_move = 0;
+uint8_t flag_set_settings = 0;
+uint8_t flag_get_settings = 0;
 int current_azimuth = 0;
 char rx_buffer[10];
+uint8_t current_outs_settings[8];
+
+uint8_t button_settings[8] = {1, 2, 4, 8, 16, 32, 64, 128};
+
+#define BUTTON_COUNT 15
+#define DEBOUNCE_MS 25
+#define POLL_INTERVAL_MS 5
+
+typedef struct {
+  GPIO_TypeDef* port;
+  uint32_t pin;
+  uint8_t state;
+  uint8_t prev_state;
+  uint32_t last_change;
+} Button;
+
+static Button buttons[BUTTON_COUNT];
+static uint32_t system_tick = 0;
+
+// Объявляем тип для функций-обработчиков
+typedef void (*ButtonHandler)(void);
+
+// Массив обработчиков для каждой кнопки
+static const ButtonHandler button_handlers[] = {
+  Set_N,   // 0
+  Set_NE,  // 1
+  Set_E,   // 2
+  Set_SE,  // 3
+  Set_S,   // 4
+  Set_SW,  // 5
+  Set_W,   // 6
+  Set_NW,  // 7
+  Set_300, // 8
+  Set_390, // 9
+  Set_430, // 10
+  Set_470, // 11
+  Set_510, // 12
+  Set_560, // 13
+  Set_PA   // 14
+};
+
+
+#define SETTINGS_FLASH_ADDR  0x0800F800  // Последняя страница 2KB Flash
+#define SETTINGS_MAGIC_NUM   0xAA55BB66  // Маркер валидности данных
+
+typedef struct {
+  uint32_t magic;      // Маркер валидности
+  uint8_t btn_values[8]; // Значения кнопок (0-255)
+  uint32_t crc32;      // Контрольная сумма
+} ButtonSettings;
+
+uint32_t Calculate_CRC32(const uint8_t* data, size_t length) {
+  uint32_t crc = 0xFFFFFFFF;
+  for (size_t i = 0; i < length; i++) {
+    crc ^= data[i];
+    for (int j = 0; j < 8; j++) {
+      crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
+    }
+  }
+  return ~crc;
+}
+
+HAL_StatusTypeDef Save_Button_Settings(const uint8_t* values) {
+  ButtonSettings settings;
+
+  // Подготовка структуры
+  settings.magic = SETTINGS_MAGIC_NUM;
+  memcpy(settings.btn_values, values, 8);
+  settings.crc32 = Calculate_CRC32((uint8_t*)&settings, sizeof(ButtonSettings)-4);
+
+  // Стирание страницы
+  HAL_FLASH_Unlock();
+  FLASH_EraseInitTypeDef erase = {
+    .TypeErase = FLASH_TYPEERASE_PAGES,
+    .Page = (SETTINGS_FLASH_ADDR - FLASH_BASE) / FLASH_PAGE_SIZE,
+    .NbPages = 1
+};
+  uint32_t page_error;
+  HAL_FLASHEx_Erase(&erase, &page_error);
+
+  // Запись данных
+  uint64_t* data = (uint64_t*)&settings;
+  for (int i = 0; i < sizeof(ButtonSettings)/8; i++) {
+    HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD,
+                    SETTINGS_FLASH_ADDR + i*8,
+                    data[i]);
+  }
+  HAL_FLASH_Lock();
+
+  return HAL_OK;
+}
+
+
+HAL_StatusTypeDef Load_Button_Settings(uint8_t* values) {
+  ButtonSettings* settings = (ButtonSettings*)SETTINGS_FLASH_ADDR;
+
+  // Проверка маркера и CRC
+  if (settings->magic != SETTINGS_MAGIC_NUM ||
+      settings->crc32 != Calculate_CRC32((uint8_t*)settings, sizeof(ButtonSettings)-4)) {
+    return HAL_ERROR; // Данные невалидны
+      }
+
+  memcpy(values, settings->btn_values, 8);
+  return HAL_OK;
+}
+
+void Beep(uint32_t duration_ms) {
+  LL_GPIO_SetOutputPin(BUZZER_GPIO_Port, BUZZER_Pin);
+  LL_mDelay(duration_ms);
+  LL_GPIO_ResetOutputPin(BUZZER_GPIO_Port, BUZZER_Pin);
+}
+
+void Buttons_Poll(void) {
+  system_tick += POLL_INTERVAL_MS;
+  if (system_tick >= UINT32_MAX - POLL_INTERVAL_MS) system_tick = 0;
+}
+
+
+void Init_Buttons(void) {
+  // Конфигурация всех кнопок
+  const struct {
+    GPIO_TypeDef* port;
+    uint32_t pin;
+  } button_configs[] = {
+    [0] = {BTN_N_GPIO_Port, BTN_N_Pin},
+    [1] = {BTN_NE_GPIO_Port, BTN_NE_Pin},
+    [2] = {BTN_E_GPIO_Port, BTN_E_Pin},
+    [3] = {BTN_SE_GPIO_Port, BTN_SE_Pin},
+    [4] = {BTN_S_GPIO_Port, BTN_S_Pin},
+    [5] = {BTN_SW_GPIO_Port, BTN_SW_Pin},
+    [6] = {BTN_W_GPIO_Port, BTN_W_Pin},
+    [7] = {BTN_NW_GPIO_Port, BTN_NW_Pin},
+    [8] = {BTN_300_GPIO_Port, BTN_300_Pin},
+    [9] = {BTN_390_GPIO_Port, BTN_390_Pin},
+    [10] = {BTN_430_GPIO_Port, BTN_430_Pin},
+    [11] = {BTN_470_GPIO_Port, BTN_470_Pin},
+    [12] = {BTN_510_GPIO_Port, BTN_510_Pin},
+    [13] = {BTN_560_GPIO_Port, BTN_560_Pin},
+    [14] = {BTN_PA_GPIO_Port, BTN_PA_Pin}
+  };
+  const uint8_t button_count = sizeof(button_configs)/sizeof(button_configs[0]);
+  for (uint8_t i = 0; i < button_count; i++) {
+    buttons[i] = (Button){
+      .port = button_configs[i].port,
+      .pin = button_configs[i].pin,
+      .state = 0,          // Исходное состояние - не нажата
+      .prev_state = 0,     // Предыдущее состояние - не нажата
+      .last_change = 0     // Время последнего изменения
+    };
+  }
+}
+
+
+// Проверка нажатия кнопки (возвращает 1 при нажатии)
+uint8_t Button_Pressed(uint8_t btn_id) {
+  if (btn_id >= BUTTON_COUNT) return 0;
+
+  Button* btn = &buttons[btn_id];
+  uint8_t current = LL_GPIO_IsInputPinSet(btn->port, btn->pin) ? 0 : 1;
+
+  // Если состояние изменилось
+  if (current != btn->prev_state) {
+    btn->last_change = system_tick;
+    btn->prev_state = current;
+  }
+  // Если состояние стабильно дольше времени дребезга
+  else if ((system_tick - btn->last_change) >= DEBOUNCE_MS) {
+    if (current && !btn->state) {
+      btn->state = current;
+      return 1;
+    }
+    btn->state = current;
+  }
+
+  return 0;
+}
+
 
 uint32_t ConvertCharToGradus(char* buffer) {
   uint32_t result = (buffer[1] - '0') * 100 +
@@ -116,24 +310,54 @@ void Send_Azimuth_to_USART(int az) {
 
 void Check_Usart_Data()
 {
-  int azimuth_from_usart = 0;
-  if (flag_status == 1)
+  if (flag_status)
   {
     flag_status = 0;
     memset(rx_buffer, 0, sizeof(rx_buffer));
     USART1_Send_String(ConvertGradusToChar(current_azimuth));
   }
-  else if (flag_move == 1)
+  else if (flag_move)
   {
+    int azimuth_from_usart = 0;
     flag_move = 0;
     azimuth_from_usart = ConvertCharToGradus(rx_buffer);
     //set outputs
     Send_Azimuth_to_USART(azimuth_from_usart);
   }
-  else if (flag_stop == 1)
+  else if (flag_stop)
   {
     flag_stop = 0;
     USART1_Send_String("Command Stop\n");
+  }
+  else if (flag_set_settings){
+    flag_set_settings = 0;
+
+    if (Save_Button_Settings(current_outs_settings) == HAL_OK) {
+      USART1_Send_String("OK: Settings saved\n");
+    } else {
+      USART1_Send_String("ERR: Save failed\n");
+    }
+    USART1_Send_String("Values:");
+    for (int i = 0; i < 8; i++) {
+      char buf[10];
+      snprintf(buf, sizeof(buf), " %d", current_outs_settings[i]);
+      USART1_Send_String(buf);
+    }
+    USART1_Send_String("\n");
+    Beep(50);
+  }
+  else if (flag_get_settings) {
+    flag_get_settings = 0;
+    if (Load_Button_Settings(button_settings) != HAL_OK) {
+      memset(button_settings, 0, 8);
+    }
+    USART1_Send_String("Values:");
+    for (int i = 0; i < 8; i++) {
+      char buf[10];
+      snprintf(buf, sizeof(buf), " %d", current_outs_settings[i]);
+      USART1_Send_String(buf);
+    }
+    USART1_Send_String("\n");
   }
 }
 
@@ -192,6 +416,114 @@ void StrobCS()
   LL_GPIO_ResetOutputPin(OE_GPIO_Port, OE_Pin);
 }
 
+void HC595_Send() {
+  ResetCS();
+  HAL_SPI_Transmit(&hspi1,(uint8_t*)led_outs, 1, 500);
+  HAL_SPI_Transmit(&hspi1,(uint8_t*)udn_outs, 1, 500);
+  HAL_SPI_Transmit(&hspi1,(uint8_t*)load_outs, 1, 500);
+  HAL_SPI_Transmit(&hspi1,(uint8_t*)relay_outs, 1, 500);
+  StrobCS();
+}
+
+
+void Check_Buttons() {
+  for (uint8_t i = 0; i < sizeof(button_handlers)/sizeof(button_handlers[0]); i++) {
+    if (Button_Pressed(i)) {
+      button_handlers[i]();
+    }
+  }
+}
+
+void Set_N() {
+  led_outs[0] = 0b00000001;
+  relay_outs[0] = 0b00001000;
+  udn_outs[0] = current_outs_settings[0];
+  HC595_Send();
+}
+
+void Set_NE() {
+  led_outs[0] = 0b00000010;
+  relay_outs[0] = 0b00001001;
+  udn_outs[0] = current_outs_settings[1];
+  HC595_Send();
+}
+
+void Set_E() {
+  led_outs[0] = 0b00000100;
+  relay_outs[0] = 0b00001100;
+  udn_outs[0] = current_outs_settings[2];
+  HC595_Send();
+}
+
+void Set_SE() {
+  led_outs[0] = 0b00001000;
+  relay_outs[0] = 0b00000010;
+  udn_outs[0] = current_outs_settings[3];
+  HC595_Send();
+}
+
+void Set_S() {
+  led_outs[0] = 0b00010000;
+  relay_outs[0] = 0b00000000;
+  udn_outs[0] = current_outs_settings[4];
+  HC595_Send();
+}
+
+void Set_SW() {
+  led_outs[0] = 0b00100000;
+  relay_outs[0] = 0b00000001;
+  udn_outs[0] = current_outs_settings[5];
+  HC595_Send();
+}
+
+void Set_W() {\
+  led_outs[0] = 0b01000000;
+  relay_outs[0] = 0b00000100;
+  udn_outs[0] = current_outs_settings[6];
+  HC595_Send();
+}
+
+void Set_NW() {
+  led_outs[0] = 0b10000000;
+  relay_outs[0] = 0b00001010;
+  udn_outs[0] = current_outs_settings[7];
+  HC595_Send();
+}
+
+void Set_300() {
+  load_outs[0] = 0b00000001;
+  HC595_Send();
+}
+
+void Set_390() {
+  load_outs[0] = 0b00000010;
+  HC595_Send();
+}
+
+void Set_430() {
+  load_outs[0] = 0b00000100;
+  HC595_Send();
+}
+
+void Set_470() {
+  load_outs[0] = 0b00001000;
+  HC595_Send();
+}
+
+void Set_510() {
+  load_outs[0] = 0b00010000;
+  HC595_Send();
+}
+
+void Set_560() {
+  load_outs[0] = 0b00100000;
+  HC595_Send();
+}
+
+void Set_PA() {
+  LL_GPIO_TogglePin(PA_ON_GPIO_Port, PA_ON_Pin);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -229,16 +561,18 @@ int main(void)
   /* USER CODE BEGIN 2 */
   LL_USART_Enable(USART2);
   LL_USART_EnableIT_RXNE(USART1);
-  ResetCS();
-  out1[0] = 0;
-  out2[0] = 0;
-  out3[0] = 0;
-  out4[0] = 0;
-  HAL_SPI_Transmit(&hspi1,(uint8_t*)out4, 1, 500);
-  HAL_SPI_Transmit(&hspi1,(uint8_t*)out3, 1, 500);
-  HAL_SPI_Transmit(&hspi1,(uint8_t*)out2, 1, 500);
-  HAL_SPI_Transmit(&hspi1,(uint8_t*)out1, 1, 500);
+  Init_Buttons();
+  relay_outs[0] = 0;
+  load_outs[0] = 0;
+  udn_outs[0] = 0;
+  led_outs[0] = 0;
+  HC595_Send();
   Say_Hi();
+  Load_Button_Settings(current_outs_settings);
+  if (current_outs_settings[0] == 0xFF) {
+    Save_Button_Settings(button_settings);
+    Load_Button_Settings(current_outs_settings);
+  }
 
   /* USER CODE END 2 */
 
@@ -247,6 +581,8 @@ int main(void)
   while (1)
   {
     Check_Usart_Data();
+    Buttons_Poll();
+    Check_Buttons();
     LL_mDelay(1);
     /* USER CODE END WHILE */
 
@@ -323,13 +659,13 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
   hspi1.Init.CRCPolynomial = 7;
-  hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  //hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+  //hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
   if (HAL_SPI_Init(&hspi1) != HAL_OK)
   {
     Error_Handler();

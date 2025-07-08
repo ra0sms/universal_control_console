@@ -42,7 +42,10 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include "stm32g0xx_hal_flash.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/

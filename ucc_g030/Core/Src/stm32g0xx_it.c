@@ -20,8 +20,10 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32g0xx_it.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#define RX_BUFFER_SIZE 64
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -30,6 +32,10 @@ extern char rx_buffer[10];
 extern uint8_t flag_stop;
 extern uint8_t flag_status;
 extern uint8_t flag_move;
+extern uint8_t flag_set_settings;
+extern uint8_t flag_get_settings;
+extern uint8_t current_outs_settings[8];
+
 
 /* USER CODE END TD */
 
@@ -164,21 +170,51 @@ void USART1_IRQHandler(void)
 {
   /* USER CODE BEGIN USART1_IRQn 0 */
   static uint8_t i = 0;
+  static uint8_t rx_buffer[RX_BUFFER_SIZE];
   char letter = (char)(USART1->RDR & 0xFF);
 
+  // Обработка конца команды
   if (letter == '\n' || letter == '\r') {
-    rx_buffer[i] = '\0';
-    switch (rx_buffer[0]) {
-      case 'S': flag_stop = 1; break;
-      case 'M': flag_move = 1; break;
-      case 'C': flag_status = 1; break;
+    rx_buffer[i] = '\0'; // NULL-terminator
+
+    // Разбор команды
+    if (rx_buffer[0] == 'F' && i > 1) {  // Команда записи настроек
+      uint8_t values[8];
+      uint8_t valid = 1;
+      uint8_t count = 0;
+
+      // Парсим значения из буфера
+      char* token = strtok((char*)rx_buffer + 1, " ");
+      while (token != NULL && count < 8) {
+        int val = atoi(token);
+        if (val >= 0 && val <= 255) {
+          values[count++] = (uint8_t)val;
+          token = strtok(NULL, " ");
+        } else {
+          valid = 0;
+          break;
+        }
+      }
+
+      if (valid && count == 8) {
+        flag_set_settings = 1;
+        memcpy(current_outs_settings, values, 8); // Копируем для сохранения
+      }
+    }
+    else {
+      // Обработка других команд (как у вас было)
+      switch (rx_buffer[0]) {
+        case 'S': flag_stop = 1; break;
+        case 'M': flag_move = 1; break;
+        case 'C': flag_status = 1; break;
+        case 'G': flag_get_settings = 1; break;
+      }
     }
     i = 0;
   }
-  else {
-    if (i < sizeof(rx_buffer) - 1) {
-      rx_buffer[i++] = letter;
-    }
+  // Накопление данных в буфер
+  else if (i < RX_BUFFER_SIZE - 1) {
+    rx_buffer[i++] = letter;
   }
   /* USER CODE END USART1_IRQn 0 */
   /* USER CODE BEGIN USART1_IRQn 1 */
