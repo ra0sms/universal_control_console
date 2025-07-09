@@ -447,6 +447,7 @@ void Check_Buttons() {
 
 void Set_N() {
   current_azimuth = 0;
+  Send_Azimuth_to_USART(current_azimuth);
   led_outs[0] = 0b00000001;
   relay_outs[0] = 0b00001000;
   udn_outs[0] = current_outs_settings[0];
@@ -455,6 +456,7 @@ void Set_N() {
 
 void Set_NE() {
   current_azimuth = 45;
+  Send_Azimuth_to_USART(current_azimuth);
   led_outs[0] = 0b00000010;
   relay_outs[0] = 0b00001001;
   udn_outs[0] = current_outs_settings[1];
@@ -463,6 +465,7 @@ void Set_NE() {
 
 void Set_E() {
   current_azimuth = 90;
+  Send_Azimuth_to_USART(current_azimuth);
   led_outs[0] = 0b00000100;
   relay_outs[0] = 0b00001100;
   udn_outs[0] = current_outs_settings[2];
@@ -471,6 +474,7 @@ void Set_E() {
 
 void Set_SE() {
   current_azimuth = 135;
+  Send_Azimuth_to_USART(current_azimuth);
   led_outs[0] = 0b00001000;
   relay_outs[0] = 0b00000010;
   udn_outs[0] = current_outs_settings[3];
@@ -479,6 +483,7 @@ void Set_SE() {
 
 void Set_S() {
   current_azimuth = 180;
+  Send_Azimuth_to_USART(current_azimuth);
   led_outs[0] = 0b00010000;
   relay_outs[0] = 0b00000000;
   udn_outs[0] = current_outs_settings[4];
@@ -487,6 +492,7 @@ void Set_S() {
 
 void Set_SW() {
   current_azimuth = 225;
+  Send_Azimuth_to_USART(current_azimuth);
   led_outs[0] = 0b00100000;
   relay_outs[0] = 0b00000001;
   udn_outs[0] = current_outs_settings[5];
@@ -495,6 +501,7 @@ void Set_SW() {
 
 void Set_W() {
   current_azimuth = 270;
+  Send_Azimuth_to_USART(current_azimuth);
   led_outs[0] = 0b01000000;
   relay_outs[0] = 0b00000100;
   udn_outs[0] = current_outs_settings[6];
@@ -503,6 +510,7 @@ void Set_W() {
 
 void Set_NW() {
   current_azimuth = 315;
+  Send_Azimuth_to_USART(current_azimuth);
   led_outs[0] = 0b10000000;
   relay_outs[0] = 0b00001010;
   udn_outs[0] = current_outs_settings[7];
