@@ -23,12 +23,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#define RX_BUFFER_SIZE 64
+#define RX_BUFFER_SIZE 32
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN TD */
-extern char rx_buffer[10];
+extern char rx_buffer[32];
 extern uint8_t flag_stop;
 extern uint8_t flag_status;
 extern uint8_t flag_move;
@@ -170,20 +170,14 @@ void USART1_IRQHandler(void)
 {
   /* USER CODE BEGIN USART1_IRQn 0 */
   static uint8_t i = 0;
-  static uint8_t rx_buffer[RX_BUFFER_SIZE];
   char letter = (char)(USART1->RDR & 0xFF);
 
-  // Обработка конца команды
   if (letter == '\n' || letter == '\r') {
-    rx_buffer[i] = '\0'; // NULL-terminator
-
-    // Разбор команды
-    if (rx_buffer[0] == 'F' && i > 1) {  // Команда записи настроек
+    rx_buffer[i] = '\0';
+    if (rx_buffer[0] == 'F' && i > 1) {
       uint8_t values[8];
       uint8_t valid = 1;
       uint8_t count = 0;
-
-      // Парсим значения из буфера
       char* token = strtok((char*)rx_buffer + 1, " ");
       while (token != NULL && count < 8) {
         int val = atoi(token);
@@ -195,14 +189,12 @@ void USART1_IRQHandler(void)
           break;
         }
       }
-
       if (valid && count == 8) {
         flag_set_settings = 1;
-        memcpy(current_outs_settings, values, 8); // Копируем для сохранения
+        memcpy(current_outs_settings, values, 8);
       }
     }
     else {
-      // Обработка других команд (как у вас было)
       switch (rx_buffer[0]) {
         case 'S': flag_stop = 1; break;
         case 'M': flag_move = 1; break;
@@ -212,9 +204,11 @@ void USART1_IRQHandler(void)
     }
     i = 0;
   }
-  // Накопление данных в буфер
   else if (i < RX_BUFFER_SIZE - 1) {
     rx_buffer[i++] = letter;
+  }
+  else {
+    i = 0;
   }
   /* USER CODE END USART1_IRQn 0 */
   /* USER CODE BEGIN USART1_IRQn 1 */

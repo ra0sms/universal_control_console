@@ -1,8 +1,10 @@
+#!venv/bin/python3
+
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
                              QPushButton, QWidget, QLabel, QComboBox,
-                             QTextEdit, QGroupBox, QCheckBox, QGridLayout)
-from PyQt5.QtCore import QTimer, Qt
+                             QTextEdit, QGroupBox, QCheckBox)
+from PyQt5.QtCore import Qt
 import serial
 import serial.tools.list_ports
 
@@ -10,7 +12,7 @@ class MicrocontrollerGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.serial = None
-        self.setWindowTitle("Direction Control Console")
+        self.setWindowTitle("Universal Control Console")
         self.setGeometry(100, 100, 400, 600)
         
         self.initUI()

@@ -76,6 +76,7 @@ void Set_470(void);
 void Set_510(void);
 void Set_560(void);
 void Set_PA(void);
+void Check_PTT(void);
 
 
 
@@ -93,8 +94,10 @@ uint8_t flag_move = 0;
 uint8_t flag_set_settings = 0;
 uint8_t flag_get_settings = 0;
 int current_azimuth = 0;
-char rx_buffer[10];
+char rx_buffer[32];
 uint8_t current_outs_settings[8];
+static uint8_t pa_previous_state = 0;
+static uint8_t ptt_active = 0;
 
 uint8_t button_settings[8] = {1, 2, 4, 8, 16, 32, 64, 128};
 
@@ -312,6 +315,7 @@ void Check_Usart_Data()
 {
   if (flag_status)
   {
+    char debug_msg[64];
     flag_status = 0;
     memset(rx_buffer, 0, sizeof(rx_buffer));
     USART1_Send_String(ConvertGradusToChar(current_azimuth));
@@ -321,17 +325,24 @@ void Check_Usart_Data()
     int azimuth_from_usart = 0;
     flag_move = 0;
     azimuth_from_usart = ConvertCharToGradus(rx_buffer);
-    //set outputs
     Send_Azimuth_to_USART(azimuth_from_usart);
+    switch (current_azimuth){
+      case 0: Set_N(); break;
+      case 45: Set_NE(); break;
+      case 90: Set_E(); break;
+      case 135: Set_SE(); break;
+      case 180: Set_S(); break;
+      case 225: Set_SW(); break;
+      case 270: Set_W(); break;
+      case 315: Set_NW(); break;
+    }
   }
   else if (flag_stop)
   {
     flag_stop = 0;
-    USART1_Send_String("Command Stop\n");
   }
   else if (flag_set_settings){
     flag_set_settings = 0;
-
     if (Save_Button_Settings(current_outs_settings) == HAL_OK) {
       USART1_Send_String("OK: Settings saved\n");
     } else {
@@ -435,6 +446,7 @@ void Check_Buttons() {
 }
 
 void Set_N() {
+  current_azimuth = 0;
   led_outs[0] = 0b00000001;
   relay_outs[0] = 0b00001000;
   udn_outs[0] = current_outs_settings[0];
@@ -442,6 +454,7 @@ void Set_N() {
 }
 
 void Set_NE() {
+  current_azimuth = 45;
   led_outs[0] = 0b00000010;
   relay_outs[0] = 0b00001001;
   udn_outs[0] = current_outs_settings[1];
@@ -449,6 +462,7 @@ void Set_NE() {
 }
 
 void Set_E() {
+  current_azimuth = 90;
   led_outs[0] = 0b00000100;
   relay_outs[0] = 0b00001100;
   udn_outs[0] = current_outs_settings[2];
@@ -456,6 +470,7 @@ void Set_E() {
 }
 
 void Set_SE() {
+  current_azimuth = 135;
   led_outs[0] = 0b00001000;
   relay_outs[0] = 0b00000010;
   udn_outs[0] = current_outs_settings[3];
@@ -463,6 +478,7 @@ void Set_SE() {
 }
 
 void Set_S() {
+  current_azimuth = 180;
   led_outs[0] = 0b00010000;
   relay_outs[0] = 0b00000000;
   udn_outs[0] = current_outs_settings[4];
@@ -470,13 +486,15 @@ void Set_S() {
 }
 
 void Set_SW() {
+  current_azimuth = 225;
   led_outs[0] = 0b00100000;
   relay_outs[0] = 0b00000001;
   udn_outs[0] = current_outs_settings[5];
   HC595_Send();
 }
 
-void Set_W() {\
+void Set_W() {
+  current_azimuth = 270;
   led_outs[0] = 0b01000000;
   relay_outs[0] = 0b00000100;
   udn_outs[0] = current_outs_settings[6];
@@ -484,6 +502,7 @@ void Set_W() {\
 }
 
 void Set_NW() {
+  current_azimuth = 315;
   led_outs[0] = 0b10000000;
   relay_outs[0] = 0b00001010;
   udn_outs[0] = current_outs_settings[7];
@@ -523,6 +542,29 @@ void Set_560() {
 void Set_PA() {
   LL_GPIO_TogglePin(PA_ON_GPIO_Port, PA_ON_Pin);
 }
+
+void Check_PTT(void) {
+  static uint32_t last_ptt_change = 0;
+  uint8_t current_ptt_state = !LL_GPIO_IsInputPinSet(PTT_IN_GPIO_Port, PTT_IN_Pin);
+  if ((system_tick - last_ptt_change) >= DEBOUNCE_MS) {
+    if (current_ptt_state && !ptt_active) {
+      pa_previous_state = LL_GPIO_IsOutputPinSet(PA_ON_GPIO_Port, PA_ON_Pin);
+      LL_GPIO_ResetOutputPin(PA_ON_GPIO_Port, PA_ON_Pin);
+      ptt_active = 1;
+      last_ptt_change = system_tick;
+    }
+    else if (!current_ptt_state && ptt_active) {
+      if (pa_previous_state) {
+        LL_GPIO_SetOutputPin(PA_ON_GPIO_Port, PA_ON_Pin);
+      } else {
+        LL_GPIO_ResetOutputPin(PA_ON_GPIO_Port, PA_ON_Pin);
+      }
+      ptt_active = 0;
+      last_ptt_change = system_tick;
+    }
+  }
+}
+
 
 /* USER CODE END 0 */
 
@@ -583,7 +625,7 @@ int main(void)
     Check_Usart_Data();
     Buttons_Poll();
     Check_Buttons();
-    LL_mDelay(1);
+    Check_PTT();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
