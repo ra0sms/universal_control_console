@@ -2,6 +2,8 @@
 
 The device can control any type of antenna switches. It has 8 independent programmable outputs and also can control [my version of receiving antenna K9AY](https://github.com/ra0sms/K9AY_with_wifi).
 
+More information (in Russian, but Translate button still works) - https://ra0sms.com/ucc/
+
 ### [Schematic](KiCad/wired_console_k9ay/wired_console_k9ay.pdf)
 
 ### Outputs description
