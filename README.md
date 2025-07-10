@@ -32,7 +32,7 @@ The device can control any type of antenna switches. It has 8 independent progra
 | 20        | **OUT7** - Seventh programmable output (when activated, has 12V out with fuse protection) |
 | 21        | **OUT8** - Eighth programmable output (when activated, has 12V out with fuse protection) |
 | 22        | **TX_GND** - when PTT activated, has connection to ground    |
-| 23        | $\overline{\text{PA_ON}}$ - when Preamp button pressed, has 12V out without any protection |
+| 23        | $$\overline{\text{PA_ON}}$$ - when Preamp button pressed, has 12V out without any protection |
 | 24        | **12V** - output voltage (goes directly from power supply connector with the diode protection) |
 | 25        | **GND** - Ground                                             |
 
