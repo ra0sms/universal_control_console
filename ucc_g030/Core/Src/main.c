@@ -558,6 +558,7 @@ void Check_PTT(void) {
     if (current_ptt_state && !ptt_active) {
       pa_previous_state = LL_GPIO_IsOutputPinSet(PA_ON_GPIO_Port, PA_ON_Pin);
       LL_GPIO_ResetOutputPin(PA_ON_GPIO_Port, PA_ON_Pin);
+      LL_GPIO_SetOutputPin(TX_GND_GPIO_Port, TX_GND_Pin);
       ptt_active = 1;
       last_ptt_change = system_tick;
     }
@@ -567,6 +568,7 @@ void Check_PTT(void) {
       } else {
         LL_GPIO_ResetOutputPin(PA_ON_GPIO_Port, PA_ON_Pin);
       }
+      LL_GPIO_ResetOutputPin(TX_GND_GPIO_Port, TX_GND_Pin);
       ptt_active = 0;
       last_ptt_change = system_tick;
     }
