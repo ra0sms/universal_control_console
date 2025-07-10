@@ -56,7 +56,5 @@ You can choose outputs which will be activated when you push the buttons. Just c
 
 UCC also can work with hamradio software, which use Yaesu rotator protocol. UCC can emulate a rotation at a given angle. You can use it with any supported software. For example [PST Rotator AZ](https://www.pstrotator.com/) and [DXLog](https://dxlog.net/).
 
-Video with example or working.
-
-
+### [Video with example or working](https://youtu.be/TXcX0s2ozSk)
 
