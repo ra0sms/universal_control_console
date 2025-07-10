@@ -50,7 +50,7 @@ The device can control any type of antenna switches. It has 8 independent progra
 
 You can choose outputs which will be activated when you push the buttons. Just connect USB to PC, choose com port and click Connect button.
 
-[Download (Windows OS)](gui/gui.zip)
+[EXE-file (Windows OS)](gui/gui.zip)
 
 [Python Script (Linux OS)](gui/gui.py)
 
